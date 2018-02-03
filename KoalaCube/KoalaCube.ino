@@ -60,9 +60,11 @@ void setup() {
   pinMode(GREEN_PIN, OUTPUT); 
   pinMode(BLUE_PIN, OUTPUT); 
   SetColourGreen();
+
 }
 
 void loop() {
+      
   // Look for new cards
   if ( ! mfrc522.PICC_IsNewCardPresent()) {
     return;
@@ -73,8 +75,42 @@ void loop() {
     return;
   }
 
+  // Show some details of the PICC (that is: the tag/card)
+    
+    Serial.print(F("PICC type: "));
+    MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+
+    // Check for compatibility
+    if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
+        &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
+        &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+        Serial.println(F("This sample only works with MIFARE Classic cards."));
+        return;
+        
+    } else {
+      Serial.print(F("Card UID:"));
+      send_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
+      Serial.println();
+
+      
+    }
+
   // Dump debug info about the card; PICC_HaltA() is automatically called
-  mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
+  //mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
+}
+
+
+
+/**
+ * Helper routine to dump a byte array as hex values to Serial.
+ */
+void send_byte_array(byte *buffer, byte bufferSize) {
+
+  for (byte i = 0; i < bufferSize; i++) {
+      Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+      Serial.print(buffer[i], HEX);
+  }
+    
 }
 
 
