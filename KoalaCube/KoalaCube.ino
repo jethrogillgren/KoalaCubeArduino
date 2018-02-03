@@ -41,6 +41,8 @@
 constexpr uint8_t RST_PIN = 9;          // Configurable, see typical pin layout above
 constexpr uint8_t SS_PIN = 10;         // Configurable, see typical pin layout above
 
+float sendHz = 1;
+
 #define BLUE_PIN 3
 #define GREEN_PIN 5
 #define RED_PIN 6
@@ -59,8 +61,8 @@ void setup() {
   while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
   SPI.begin();      // Init SPI bus
   mfrc522.PCD_Init();   // Init MFRC522
-  mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
-  Serial.println(F("Scan PICC to see UID, SAK, type, and data blocks..."));
+  
+  //mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
 
   //RGB LED
   pinMode(RED_PIN, OUTPUT); 
@@ -101,11 +103,11 @@ void loop() {
         return;
         
     } else {
-      Serial.print(F("Card UID:"));
+      //Serial.print(F("Card UID:"));
       send_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
       Serial.println();
       
-      delay(1000);                       // wait for a second
+      delay(1000/sendHz);                       // wait for a second
     }
 
   // Dump debug info about the card; PICC_HaltA() is automatically called
