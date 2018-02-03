@@ -45,6 +45,13 @@ constexpr uint8_t SS_PIN = 10;         // Configurable, see typical pin layout a
 #define GREEN_PIN 5
 #define RED_PIN 6
 
+#define MSG_SET_COLOUR_BLUE 'B'
+#define MSG_SET_COLOUR_RED 'R'
+#define MSG_SET_COLOUR_GREEN 'G'
+#define MSG_SET_COLOUR_WHITE 'W'
+#define MSG_SET_COLOUR_YELLOW 'Y'
+
+
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 
 void setup() {
@@ -64,6 +71,13 @@ void setup() {
 }
 
 void loop() {
+
+  // The loop constantly checks for new serial input:
+  if ( Serial.available() )
+  {
+    // If new input is available on serial port
+    parseSerialInput(Serial.read()); // parse it
+  }
       
   // Look for new cards
   if ( ! mfrc522.PICC_IsNewCardPresent()) {
@@ -77,10 +91,9 @@ void loop() {
 
   // Show some details of the PICC (that is: the tag/card)
     
-    Serial.print(F("PICC type: "));
-    MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
 
     // Check for compatibility
+    MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
     if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
         &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
         &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
@@ -91,12 +104,45 @@ void loop() {
       Serial.print(F("Card UID:"));
       send_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
       Serial.println();
-
       
+      delay(1000);                       // wait for a second
     }
 
   // Dump debug info about the card; PICC_HaltA() is automatically called
   //mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
+}
+
+
+
+// Parse serial input, take action if it's a valid character
+void parseSerialInput(char c)
+{
+  
+  switch (c)
+  {
+  case MSG_SET_COLOUR_RED: // Send a frame out next. 
+    SetColourRed();
+    break;
+
+  case MSG_SET_COLOUR_BLUE: // Send a frame out next. 
+    SetColourBlue();
+    break;
+
+  case MSG_SET_COLOUR_WHITE: // Send a frame out next. 
+    SetColourWhite();
+    break;
+
+  case MSG_SET_COLOUR_GREEN: // Send a frame out next. 
+    SetColourGreen();
+    break;
+
+  case MSG_SET_COLOUR_YELLOW: // Send a frame out next. 
+    SetColourYellow();
+    break;
+
+  default: // If an invalid character, do nothing
+    break;
+  }
 }
 
 
