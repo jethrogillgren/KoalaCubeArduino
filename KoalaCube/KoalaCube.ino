@@ -1,12 +1,10 @@
-
-
 /*
  * --------------------------------------------------------------------------------------------------------------------
  * Controls local LED from server messages, and lets server know if it has found a Tag.
  * --------------------------------------------------------------------------------------------------------------------
  * 
  * This is the moving KoalaCube object code.
- * Mesh Network of XBees.  Messages are cubeId:char  with cubeId as the destination or the sender.
+ * Mesh Network of XBees.  Messages are CUBE_ID:char  with CUBE_ID as the destination or the sender.
  * 
  * Pin layout used:
  * -----------------------------------------------------------------------------------------
@@ -26,24 +24,26 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-int cubeId = 0; //Manually set for each different cube build.
 
 constexpr uint8_t RST_PIN = 9;          // Configurable, see typical pin layout above
 constexpr uint8_t SS_PIN = 10;         // Configurable, see typical pin layout above
 
 float sendHz = 1;
 
+long cubeId = 1; //Manually set for each different cube build.
+
 #define BLUE_PIN 3
 #define GREEN_PIN 5
 #define RED_PIN 6
 
-String msgSeperator = ':'               //Message content is after this char.  Dest is before it.
+char msgSeperator = ':';               //Message content is after this char.  Dest is before it.
 #define MSG_SET_COLOUR_BLUE   'B'
 #define MSG_SET_COLOUR_RED    'R'
 #define MSG_SET_COLOUR_GREEN  'G'
 #define MSG_SET_COLOUR_WHITE  'W'
 #define MSG_SET_COLOUR_YELLOW 'Y'
 #define MSG_SET_COLOUR_NONE   'N'
+char endMarker = '\n';                  //Newline terminates all messages sent
 
 
 
@@ -61,7 +61,7 @@ void setup() {
   pinMode(RED_PIN, OUTPUT); 
   pinMode(GREEN_PIN, OUTPUT); 
   pinMode(BLUE_PIN, OUTPUT); 
-  SetColourGreen();
+  SetColour(100,100,100);
 
 }
 
@@ -71,7 +71,7 @@ void loop() {
   if ( Serial.available() )
   {
     // If new input is available on serial port
-    parseSerialInput(Serial.read()); // parse it
+    parseSerialInput();
   }
       
   // Look for new cards
@@ -96,7 +96,8 @@ void loop() {
         return;
         
     } else {
-      //Serial.print(F("Card UID:"));
+      Serial.print( cubeId );
+      Serial.print( msgSeperator );
       send_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
       Serial.println();
       
@@ -110,38 +111,51 @@ void loop() {
 
 
 // Parse serial input, take action if it's a valid character
-void parseSerialInput(char c)
+void parseSerialInput()
 {
-  
-  switch (c)
+
+
+  long id = Serial.parseInt(); //WIll skip non int chars and find the first int
+  if( id == cubeId )
   {
-  case cubeId+msgSeperator+MSG_SET_COLOUR_RED: 
     SetColourRed();
-    break;
-
-  case cubeId+msgSeperator+MSG_SET_COLOUR_BLUE: 
-    SetColourBlue();
-    break;
-
-  case cubeId+msgSeperator+MSG_SET_COLOUR_WHITE: 
-    SetColourWhite();
-    break;
-
-  case cubeId+msgSeperator+MSG_SET_COLOUR_GREEN: 
-    SetColourGreen();
-    break;
-
-  case cubeId+msgSeperator+MSG_SET_COLOUR_YELLOW: 
-    SetColourYellow();
-    break;
-
-  case cubeId+msgSeperator+MSG_SET_COLOUR_NONE:
-    SetColourNone();
-    break;
-
-  default: // If an invalid character, do nothing
-    break;
+    char sep = Serial.read();//waits for next until timeout
+    if (sep == msgSeperator)
+    {
+      char msg = Serial.read();//waits for next untik timeout
+      switch (msg)
+      {
+      case MSG_SET_COLOUR_RED: 
+        SetColourRed();
+        break;
+    
+      case MSG_SET_COLOUR_BLUE: 
+        SetColourBlue();
+        break;
+    
+      case MSG_SET_COLOUR_WHITE: 
+        SetColourWhite();
+        break;
+    
+      case MSG_SET_COLOUR_GREEN: 
+        SetColourGreen();
+        break;
+    
+      case MSG_SET_COLOUR_YELLOW: 
+        SetColourYellow();
+        break;
+    
+      case MSG_SET_COLOUR_NONE:
+        SetColourNone();
+        break;
+    
+      default: // If an invalid character, do nothing
+        break;
+      }
+    }
   }
+
+  Serial.find(endMarker); //Read away any remaining data.
 }
 
 
@@ -152,7 +166,7 @@ void parseSerialInput(char c)
 void send_byte_array(byte *buffer, byte bufferSize) {
 
   for (byte i = 0; i < bufferSize; i++) {
-      Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+      Serial.print(buffer[i] < 0x10 ? "0" : "");
       Serial.print(buffer[i], HEX);
   }
     
