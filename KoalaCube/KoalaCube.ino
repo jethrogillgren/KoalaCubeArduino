@@ -23,38 +23,54 @@
 
 #include <SPI.h>
 #include <MFRC522.h>
+#include <XBee.h>
+#include <SoftwareSerial.h>
+#include <Printers.h>
+#include <elapsedMillis.h>
 
 
-constexpr uint8_t RST_PIN = 9;          // Configurable, see typical pin layout above
-constexpr uint8_t SS_PIN = 10;         // Configurable, see typical pin layout above
-
-float sendHz = 1;
 
 long cubeId = 1; //Manually set for each different cube build.
 
+//LEDS
 #define BLUE_PIN 3
 #define GREEN_PIN 5
 #define RED_PIN 6
 
-char msgSeperator = ':';               //Message content is after this char.  Dest is before it.
+//XBEE & COMMUNICATIONS
+SoftwareSerial xbeeSerial(2, 4); // RX, TX
+
+//Works with Series1 and 2
+XBeeWithCallbacks xbee;
+
 #define MSG_SET_COLOUR_BLUE   'B'
 #define MSG_SET_COLOUR_RED    'R'
 #define MSG_SET_COLOUR_GREEN  'G'
 #define MSG_SET_COLOUR_WHITE  'W'
 #define MSG_SET_COLOUR_YELLOW 'Y'
 #define MSG_SET_COLOUR_NONE   'N'
-char endMarker = '\n';                  //Newline terminates all messages sent
 
+// Build a reuseable message packet to send to the Co-Ordinator
+XBeeAddress64 coordinatorAddr = XBeeAddress64(0x00000000, 0x00000000);
 
+uint8_t placeMessagePayload[4] = {0};
+ZBTxRequest placeMessage = ZBTxRequest(coordinatorAddr, placeMessagePayload, sizeof(placeMessagePayload));
 
+//RFID
+constexpr uint8_t RST_PIN = 9;          // Configurable, see typical pin layout above
+constexpr uint8_t SS_PIN = 10;         // Configurable, see typical pin layout above
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
+
+elapsedMillis timeElapsed; //declare global if you don't want it reset every time loop runs
+unsigned int sendInterval = 2000; // delay in milliseconds 
+
+
 
 void setup() {
   Serial.begin(9600);   // Initialize serial communications with the PC
-  while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
   SPI.begin();      // Init SPI bus
   mfrc522.PCD_Init();   // Init MFRC522
-  
+  timeElapsed = sendInterval;
   //mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
 
   //RGB LED
@@ -63,16 +79,32 @@ void setup() {
   pinMode(BLUE_PIN, OUTPUT); 
   SetColour(100,100,100);
 
+  // XBEE
+  xbeeSerial.begin(9600);
+  xbee.setSerial(xbeeSerial);
+
+  // Make sure that any errors are logged to Serial. The address of
+  // Serial is first cast to Print*, since that's what the callback
+  // expects, and then to uintptr_t to fit it inside the data parameter.
+  xbee.onPacketError(printErrorCb, (uintptr_t)(Print*)&Serial);
+  xbee.onTxStatusResponse(printErrorCb, (uintptr_t)(Print*)&Serial);
+  xbee.onZBTxStatusResponse(printErrorCb, (uintptr_t)(Print*)&Serial);
+
+  // These are called when an actual packet received
+  xbee.onZBRxResponse(zbReceive, (uintptr_t)(Print*)&Serial);
+
+  // Print any unhandled response with proper formatting
+  xbee.onOtherResponse(printResponseCb, (uintptr_t)(Print*)&Serial);
+
+  // Enable this to print the raw bytes for _all_ responses before they
+  // are handled
+  xbee.onResponse(printRawResponseCb, (uintptr_t)(Print*)&Serial);
 }
 
 void loop() {
 
-  // The loop constantly checks for new serial input:
-  if ( Serial.available() )
-  {
-    // If new input is available on serial port
-    parseSerialInput();
-  }
+    // Continuously let xbee read packets and call callbacks.
+  xbee.loop();
       
   // Look for new cards
   if ( ! mfrc522.PICC_IsNewCardPresent()) {
@@ -86,93 +118,131 @@ void loop() {
 
   // Show some details of the PICC (that is: the tag/card)
     
-
-    // Check for compatibility
-    MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
-    if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
-        &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
-        &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
-        Serial.println(F("This sample only works with MIFARE Classic cards."));
-        return;
-        
-    } else {
-      Serial.print( cubeId );
-      Serial.print( msgSeperator );
-      send_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
-      Serial.println();
+  // Check for compatibility
+  MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+  if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
+      &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
+      &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+      Serial.println(F("This sample only works with MIFARE Classic cards."));
+      return;
       
-      delay(1000/sendHz);                       // wait for a second (makes L flash off)
-    }
-
+  } else {
+      SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
+  }
+  
   // Dump debug info about the card; PICC_HaltA() is automatically called
   //mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
 }
 
 
 
+
+
+//// XBEE / COMMUNICATION FUNCTIONS
+//FrameType:  0x90  recieved.
+void zbReceive(ZBRxResponse& rx, uintptr_t data) {
+
+  if (rx.getOption() == ZB_PACKET_ACKNOWLEDGED
+      || rx.getOption() == ZB_BROADCAST_PACKET ) {
+
+      //Debug it out - copied from the lib
+      Print *p = (Print*)data;
+      if (!p) {
+        Serial.println("ERROR 2");
+        //flashSingleLed(LED_BUILTIN, 2, 500);
+        return;
+      }
+      p->println(F("Recieved:"));
+  
+        p->print("  Payload: ");
+        printHex(*p, rx.getFrameData() + rx.getDataOffset(), rx.getDataLength(), F(" "), F("\r\n    "), 8);
+      p->println();
+
+        p->print("  From: ");
+        printHex(*p, rx.getRemoteAddress64() );
+        
+      p->println();
+      
+      //flashSingleLed(LED_BUILTIN, 5, 50);
+      
+  } else {
+      // we got it (obviously) but sender didn't get an ACK
+      Serial.println("ERROR 1");
+      //flashSingleLed(LED_BUILTIN, 1, 500);
+  }
+}
+void SendPlacedPacket( byte *buffer, byte bufferSize )
+{
+  if (timeElapsed > sendInterval) 
+  {
+
+    for (byte i = 0; i < bufferSize; i++) {
+      placeMessagePayload[i] = buffer[i];
+    }
+  
+    placeMessage.setFrameId(xbee.getNextFrameId());
+    
+    Serial.println("SENDING 'Placed' Message to Co-ordinator");
+    //xbee.send(placeMessage);
+    
+    // Send the command and wait up to N ms for a response.  xbee loop continues during this time.
+    uint8_t status = xbee.sendAndWait(placeMessage, 1000);
+    if (status == 0)
+    {
+      Serial.println(F("SEND ACKNOWLEDGED"));
+      timeElapsed = 0;       // reset the counter to 0 so the counting starts over...
+
+    } else { //Complain, but do not reset timeElapsed - so that a new packet comes in and tried again immedietly.
+      Serial.print(F("SEND FAILED: "));
+      printHex(status, 2);
+      Serial.println();
+      //flashSingleLed(LED_BUILTIN, 3, 500);
+    }
+    
+  }
+}
+
 // Parse serial input, take action if it's a valid character
-void parseSerialInput()
+void parseCommand( char cmd )
 {
 
-
-  long id = Serial.parseInt(); //WIll skip non int chars and find the first int
-  if( id == cubeId )
+  switch (cmd)
   {
+  case MSG_SET_COLOUR_RED: 
     SetColourRed();
-    char sep = Serial.read();//waits for next until timeout
-    if (sep == msgSeperator)
-    {
-      char msg = Serial.read();//waits for next untik timeout
-      switch (msg)
-      {
-      case MSG_SET_COLOUR_RED: 
-        SetColourRed();
-        break;
-    
-      case MSG_SET_COLOUR_BLUE: 
-        SetColourBlue();
-        break;
-    
-      case MSG_SET_COLOUR_WHITE: 
-        SetColourWhite();
-        break;
-    
-      case MSG_SET_COLOUR_GREEN: 
-        SetColourGreen();
-        break;
-    
-      case MSG_SET_COLOUR_YELLOW: 
-        SetColourYellow();
-        break;
-    
-      case MSG_SET_COLOUR_NONE:
-        SetColourNone();
-        break;
-    
-      default: // If an invalid character, do nothing
-        break;
-      }
-    }
-  }
+    break;
 
-  Serial.find(endMarker); //Read away any remaining data.
+  case MSG_SET_COLOUR_BLUE: 
+    SetColourBlue();
+    break;
+
+  case MSG_SET_COLOUR_WHITE: 
+    SetColourWhite();
+    break;
+
+  case MSG_SET_COLOUR_GREEN: 
+    SetColourGreen();
+    break;
+
+  case MSG_SET_COLOUR_YELLOW: 
+    SetColourYellow();
+    break;
+
+  case MSG_SET_COLOUR_NONE:
+    SetColourNone();
+    break;
+
+  default: // If an invalid character, do nothing
+    break;
+  }
 }
 
 
 
-/**
- * Helper routine to dump a byte array as hex values to Serial.
- */
-void send_byte_array(byte *buffer, byte bufferSize) {
-
-  for (byte i = 0; i < bufferSize; i++) {
-      Serial.print(buffer[i] < 0x10 ? "0" : "");
-      Serial.print(buffer[i], HEX);
-  }
-    
-}
 
 
+
+////LED FUNCTIONS 
 void SetColourRed() {
   SetColour(255,0,0);
 }
@@ -202,3 +272,34 @@ void SetColour(int red, int green, int blue)
   analogWrite(GREEN_PIN, green);
   analogWrite(BLUE_PIN, blue);  
 }
+
+//Note, this blocks
+void flashSingleLed(int pin, int times, int wait) {
+
+  for (int i = 0; i < times; i++) {
+    digitalWrite(pin, HIGH);
+    delay(wait);
+    digitalWrite(pin, LOW);
+
+    if (i + 1 < times) {
+      delay(wait);
+    }
+  }
+}
+
+
+
+
+
+// UTIL FUNCTIONS
+void printHex(int num, int precision) {
+     char tmp[16];
+     char format[128];
+
+     sprintf(format, "0x%%.%dX", precision);
+
+     sprintf(tmp, format, num);
+     Serial.print(tmp);
+}
+
+
