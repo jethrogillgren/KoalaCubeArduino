@@ -69,7 +69,9 @@ unsigned int sendInterval = 2000; // delay in milliseconds
 void setup() {
   Serial.begin(9600);   // Initialize serial communications with the PC
   SPI.begin();      // Init SPI bus
+  mfrc522.PCD_SetAntennaGain( 0x07 << 4 );
   mfrc522.PCD_Init();   // Init MFRC522
+  mfrc522.PCD_SetAntennaGain( 0x07 << 4 );
   timeElapsed = sendInterval;
   //mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
 
@@ -123,8 +125,8 @@ void loop() {
   if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
       &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
       &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
-      Serial.println(F("This sample only works with MIFARE Classic cards."));
-      return;
+    Serial.println(F("This sample only works with MIFARE Classic cards."));
+    return;
       
   } else {
       SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
@@ -153,15 +155,16 @@ void zbReceive(ZBRxResponse& rx, uintptr_t data) {
         return;
       }
       p->println(F("Recieved:"));
-  
         p->print("  Payload: ");
         printHex(*p, rx.getFrameData() + rx.getDataOffset(), rx.getDataLength(), F(" "), F("\r\n    "), 8);
       p->println();
-
         p->print("  From: ");
         printHex(*p, rx.getRemoteAddress64() );
-        
       p->println();
+
+      //KoalaCubes only take 1 char commands
+      printHex(rx.getData()[0], 2);
+      parseCommand( (char) rx.getData()[0] );
       
       //flashSingleLed(LED_BUILTIN, 5, 50);
       
@@ -176,9 +179,20 @@ void SendPlacedPacket( byte *buffer, byte bufferSize )
   if (timeElapsed > sendInterval) 
   {
 
-    for (byte i = 0; i < bufferSize; i++) {
-      placeMessagePayload[i] = buffer[i];
+    //We assume 4 byte UIDs
+    if( bufferSize != 4 )
+    {
+      Serial.print(F("ERROR 4 - Bad UUID Length: "));
+      Serial.println(bufferSize);
+      return;
     }
+    
+    Serial.println(F("SENDING UID:"));
+    for ( uint8_t i = 0; i < 4; i++) {  //
+      placeMessagePayload[i] = buffer[i];
+      Serial.print(placeMessagePayload[i], HEX);
+    }
+    Serial.println();
   
     placeMessage.setFrameId(xbee.getNextFrameId());
     
@@ -205,7 +219,8 @@ void SendPlacedPacket( byte *buffer, byte bufferSize )
 // Parse serial input, take action if it's a valid character
 void parseCommand( char cmd )
 {
-
+  Serial.print("Cmd:");
+  Serial.println(cmd);
   switch (cmd)
   {
   case MSG_SET_COLOUR_RED: 
@@ -233,6 +248,8 @@ void parseCommand( char cmd )
     break;
 
   default: // If an invalid character, do nothing
+    Serial.print("Unable to parse command: ");
+    Serial.println(cmd);
     break;
   }
 }
