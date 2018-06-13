@@ -28,14 +28,19 @@
 #include <Printers.h>
 #include <elapsedMillis.h>
 
-
-
-long cubeId = 1; //Manually set for each different cube build.
+#include <Adafruit_NeoPixel.h>
 
 //LEDS
-#define BLUE_PIN 3
-#define GREEN_PIN 5
-#define RED_PIN 6
+// Which pin on the Arduino is connected to the NeoPixels?
+// On a Trinket or Gemma we suggest changing this to 1
+#define PIN            3
+// How many NeoPixels are attached to the Arduino?
+#define NUMPIXELS      64
+// When we setup the NeoPixel library, we tell it how many pixels, and which pin to use to send signals.
+// Note that for older NeoPixel strips you might need to change the third parameter--see the strandtest
+// example for more information on possible values.
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+
 
 //XBEE & COMMUNICATIONS
 SoftwareSerial xbeeSerial(2, 4); // RX, TX
@@ -76,10 +81,9 @@ void setup() {
   //mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
 
   //RGB LED
-  pinMode(RED_PIN, OUTPUT); 
-  pinMode(GREEN_PIN, OUTPUT); 
-  pinMode(BLUE_PIN, OUTPUT); 
+  pixels.begin(); // This initializes the NeoPixel library.
   SetColour(100,100,100);
+  //SetColourGreen();
 
   // XBEE
   xbeeSerial.begin(9600);
@@ -101,9 +105,11 @@ void setup() {
   // Enable this to print the raw bytes for _all_ responses before they
   // are handled
   xbee.onResponse(printRawResponseCb, (uintptr_t)(Print*)&Serial);
+
 }
 
 void loop() {
+
 
     // Continuously let xbee read packets and call callbacks.
   xbee.loop();
@@ -280,14 +286,13 @@ void SetColourNone() {
 }
 void SetColour(int red, int green, int blue)
 {
-  #ifdef COMMON_ANODE
-    red = 255 - red;
-    green = 255 - green;
-    blue = 255 - blue;
-  #endif
-  analogWrite(RED_PIN, red);
-  analogWrite(GREEN_PIN, green);
-  analogWrite(BLUE_PIN, blue);  
+  for(int i=0;i<NUMPIXELS;i++){
+    // pixels.Color takes RGB values, from 0,0,0 up to 255,255,255
+    pixels.setPixelColor(i, pixels.Color(red, green, blue));
+      pixels.show(); // This sends the updated pixel color to the hardware.
+
+  }
+
 }
 
 //Note, this blocks
