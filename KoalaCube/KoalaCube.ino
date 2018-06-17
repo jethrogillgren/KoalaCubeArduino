@@ -43,7 +43,7 @@ Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ80
 
 
 //XBEE & COMMUNICATIONS
-SoftwareSerial xbeeSerial(2, 4); // RX, TX
+SoftwareSerial xbeeSerial(7, 6); // RX, TX
 
 //Works with Series1 and 2
 XBeeWithCallbacks xbee;
@@ -106,6 +106,7 @@ void setup() {
   // are handled
   xbee.onResponse(printRawResponseCb, (uintptr_t)(Print*)&Serial);
 
+  Serial.println("Setup Completed OK");
 }
 
 void loop() {
