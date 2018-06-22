@@ -5,20 +5,6 @@
  * 
  * This is the moving KoalaCube object code.
  * Mesh Network of XBees.  Messages are CUBE_ID:char  with CUBE_ID as the destination or the sender.
- * 
- * Pin layout used:
- * -----------------------------------------------------------------------------------------
- *             MFRC522      Arduino       Arduino   Arduino    Arduino          Arduino
- *             Reader/PCD   Uno/101       Mega      Nano v3    Leonardo/Micro   Pro Micro
- * Signal      Pin          Pin           Pin       Pin        Pin              Pin
- * -----------------------------------------------------------------------------------------
- * RST/Reset   RST          9             5         D9         RESET/ICSP-5     RST
- * SPI SS      SDA(SS)      10            53        D10        10               10
- * SPI MOSI    MOSI         11 / ICSP-4   51        D11        ICSP-4           16
- * SPI MISO    MISO         12 / ICSP-1   50        D12        ICSP-1           14
- * SPI SCK     SCK          13 / ICSP-3   52        D13        ICSP-3           15
- * 
- * TODO - KoalaCube full pins
  */
 
 #include <SPI.h>
@@ -29,6 +15,7 @@
 #include <elapsedMillis.h>
 
 #include <Adafruit_NeoPixel.h>
+
 
 //LEDS
 // Which pin on the Arduino is connected to the NeoPixels?
@@ -82,7 +69,7 @@ void setup() {
 
   //RGB LED
   pixels.begin(); // This initializes the NeoPixel library.
-  SetColour(100,100,100);
+  SetColour(50,50,50);
   //SetColourGreen();
 
   // XBEE
@@ -111,17 +98,19 @@ void setup() {
 
 void loop() {
 
-
-    // Continuously let xbee read packets and call callbacks.
+  // Continuously let xbee read packets and call callbacks.
   xbee.loop();
-      
+     
   // Look for new cards
   if ( ! mfrc522.PICC_IsNewCardPresent()) {
     return;
   }
 
+//  Serial.println("A card is present");
+  
   // Select one of the cards
   if ( ! mfrc522.PICC_ReadCardSerial()) {
+    Serial.println("Could not read serial from card");
     return;
   }
 
@@ -132,7 +121,7 @@ void loop() {
   if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
       &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
       &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
-    Serial.println(F("This sample only works with MIFARE Classic cards."));
+    Serial.println(F("Bad Card - needs MIFARE Classic cards."));
     return;
       
   } else {
