@@ -4,7 +4,6 @@
  * --------------------------------------------------------------------------------------------------------------------
  * 
  * This is the moving KoalaCube object code.
- * Mesh Network of XBees.  Messages are CUBE_ID:char  with CUBE_ID as the destination or the sender.
  */
 
 #include <SPI.h>
@@ -41,6 +40,12 @@ XBeeWithCallbacks xbee;
 #define MSG_SET_COLOUR_WHITE  'W'
 #define MSG_SET_COLOUR_YELLOW 'Y'
 #define MSG_SET_COLOUR_NONE   'N'
+
+unsigned int flickerState = 2; // 0:low power  1:medium power  2:full power
+int flickerDelay = 0;
+#define MSG_SET_FLICKER_0 '0'
+#define MSG_SET_FLICKER_1 '1'
+#define MSG_SET_FLICKER_2 '2'
 
 // Build a reuseable message packet to send to the Co-Ordinator
 XBeeAddress64 coordinatorAddr = XBeeAddress64(0x00000000, 0x00000000);
@@ -127,7 +132,18 @@ void loop() {
   } else {
       SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
   }
-  
+
+  if( flickerState < 2 )
+  {
+    flickerDelay--;
+    delay(50);
+    if(flickerDelay <= 0)
+    {
+      flickerDelay = random(10, 50);
+      int val = random(0, 30) + (flickerState*20);
+      SetColour( random(10, 50), random(10, 50), random(10, 50) );
+    }
+  }
   // Dump debug info about the card; PICC_HaltA() is automatically called
   //mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
 }
@@ -243,6 +259,18 @@ void parseCommand( char cmd )
     SetColourNone();
     break;
 
+  case MSG_SET_FLICKER_0:
+    flickerState = 0;
+    break;
+
+  case MSG_SET_FLICKER_1:
+    flickerState = 1;
+    break;
+
+  case MSG_SET_FLICKER_2:
+    flickerState = 2;
+    break;
+
   default: // If an invalid character, do nothing
     Serial.print("Unable to parse command: ");
     Serial.println(cmd);
@@ -285,7 +313,7 @@ void SetColour(int red, int green, int blue)
 
 }
 
-//Note, this blocks
+// Note, this blocks
 void flashSingleLed(int pin, int times, int wait) {
 
   for (int i = 0; i < times; i++) {
@@ -299,10 +327,6 @@ void flashSingleLed(int pin, int times, int wait) {
   }
 }
 
-
-
-
-
 // UTIL FUNCTIONS
 void printHex(int num, int precision) {
      char tmp[16];
@@ -313,5 +337,3 @@ void printHex(int num, int precision) {
      sprintf(tmp, format, num);
      Serial.print(tmp);
 }
-
-
