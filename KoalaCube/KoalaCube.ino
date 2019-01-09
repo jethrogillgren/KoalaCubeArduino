@@ -74,7 +74,7 @@ void setup() {
 
   //RGB LED
   pixels.begin(); // This initializes the NeoPixel library.
-  SetColour(50,50,50);
+  SetColour(25,25,25);
   //SetColourGreen();
 
   // XBEE
@@ -166,13 +166,13 @@ void zbReceive(ZBRxResponse& rx, uintptr_t data) {
         //flashSingleLed(LED_BUILTIN, 2, 500);
         return;
       }
-      p->println(F("Recieved:"));
+      /*p->println(F("Recieved:"));
         p->print("  Payload: ");
         printHex(*p, rx.getFrameData() + rx.getDataOffset(), rx.getDataLength(), F(" "), F("\r\n    "), 8);
       p->println();
         p->print("  From: ");
         printHex(*p, rx.getRemoteAddress64() );
-      p->println();
+      p->println();*/
 
       //KoalaCubes only take 1 char commands
       printHex(rx.getData()[0], 2);
@@ -199,23 +199,23 @@ void SendPlacedPacket( byte *buffer, byte bufferSize )
       return;
     }
     
-    Serial.println(F("SENDING UID:"));
+    /*Serial.println(F("SENDING UID:"));
     for ( uint8_t i = 0; i < 4; i++) {  //
       placeMessagePayload[i] = buffer[i];
       Serial.print(placeMessagePayload[i], HEX);
     }
-    Serial.println();
+    Serial.println();*/
   
     placeMessage.setFrameId(xbee.getNextFrameId());
     
-    Serial.println("SENDING 'Placed' Message to Co-ordinator");
+    //Serial.println("SENDING 'Placed' Message to Co-ordinator");
     //xbee.send(placeMessage);
     
     // Send the command and wait up to N ms for a response.  xbee loop continues during this time.
     uint8_t status = xbee.sendAndWait(placeMessage, 1000);
     if (status == 0)
     {
-      Serial.println(F("SEND ACKNOWLEDGED"));
+      //Serial.println(F("SEND ACKNOWLEDGED"));
       timeElapsed = 0;       // reset the counter to 0 so the counting starts over...
 
     } else { //Complain, but do not reset timeElapsed - so that a new packet comes in and tried again immedietly.
@@ -304,7 +304,7 @@ void SetColourNone() {
 }
 void SetColour(int red, int green, int blue)
 {
-  for(int i=0;i<NUMPIXELS;i++){
+  for(int i=0;i<NUMPIXELS;i+=1){
     // pixels.Color takes RGB values, from 0,0,0 up to 255,255,255
     pixels.setPixelColor(i, pixels.Color(red, green, blue));
       pixels.show(); // This sends the updated pixel color to the hardware.
