@@ -17,11 +17,17 @@
 
 
 //LEDS
+bool PINK_MOD = false;
 // Which pin on the Arduino is connected to the NeoPixels?
 // On a Trinket or Gemma we suggest changing this to 1
 #define PIN            3
 // How many NeoPixels are attached to the Arduino?
 #define NUMPIXELS      64
+
+//Default max brightness (0-255)
+#define BRIGHTNESS 50
+//Number of pixels to miss to save power.
+#define PIXEL_STEP 1
 // When we setup the NeoPixel library, we tell it how many pixels, and which pin to use to send signals.
 // Note that for older NeoPixel strips you might need to change the third parameter--see the strandtest
 // example for more information on possible values.
@@ -47,6 +53,12 @@ int flickerDelay = 0;
 #define MSG_SET_FLICKER_1 '1'
 #define MSG_SET_FLICKER_2 '2'
 
+#define MSG_SETUP_0 'a'
+#define MSG_SETUP_1 'b'
+#define MSG_SETUP_2 'c'
+#define MSG_SETUP_3 'd'
+//#define MSG_SETUP_4 'e'
+
 // Build a reuseable message packet to send to the Co-Ordinator
 XBeeAddress64 coordinatorAddr = XBeeAddress64(0x00000000, 0x00000000);
 
@@ -70,11 +82,14 @@ void setup() {
   mfrc522.PCD_Init();   // Init MFRC522
   mfrc522.PCD_SetAntennaGain( 0x07 << 4 );
   timeElapsed = sendInterval;
-  //mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
+  mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
 
   //RGB LED
   pixels.begin(); // This initializes the NeoPixel library.
-  SetColour(25,25,25);
+  SetColourWhite();
+  delay(1000);
+  SetColourNone();
+  LightLEDPosition(27,  BRIGHTNESS,BRIGHTNESS,BRIGHTNESS);
   //SetColourGreen();
 
   // XBEE
@@ -98,20 +113,39 @@ void setup() {
   // are handled
   xbee.onResponse(printRawResponseCb, (uintptr_t)(Print*)&Serial);
 
-  Serial.println("Setup Completed OK");
+  if(PINK_MOD)
+    Serial.println("Setup (PINK MOD) Completed OK");
+  else
+    Serial.println("Setup Completed OK");
 }
 
 void loop() {
 
+  //XBEE
   // Continuously let xbee read packets and call callbacks.
   xbee.loop();
-     
+
+
+  //LEDS
+  if( flickerState < 2 )
+  {
+    flickerDelay--;
+    delay(50);
+    if(flickerDelay <= 0)
+    {
+      flickerDelay = random(10, 50);
+      int val = random(0, 30) + (flickerState*20);
+      SetColour( random(10, 50), random(10, 50), random(10, 50) );
+    }
+  }
+  
+  //RFID
   // Look for new cards
   if ( ! mfrc522.PICC_IsNewCardPresent()) {
     return;
   }
 
-//  Serial.println("A card is present");
+  Serial.println("A card is present");
   
   // Select one of the cards
   if ( ! mfrc522.PICC_ReadCardSerial()) {
@@ -133,19 +167,10 @@ void loop() {
       SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
   }
 
-  if( flickerState < 2 )
-  {
-    flickerDelay--;
-    delay(50);
-    if(flickerDelay <= 0)
-    {
-      flickerDelay = random(10, 50);
-      int val = random(0, 30) + (flickerState*20);
-      SetColour( random(10, 50), random(10, 50), random(10, 50) );
-    }
-  }
+
   // Dump debug info about the card; PICC_HaltA() is automatically called
   //mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
+
 }
 
 
@@ -271,6 +296,26 @@ void parseCommand( char cmd )
     flickerState = 2;
     break;
 
+  case MSG_SETUP_0:
+    SetColourNone();
+    LightNLEDs(1);
+    break;
+  case MSG_SETUP_1:
+    SetColourNone();
+    LightNLEDs(2);
+    break;
+  case MSG_SETUP_2:
+    SetColourNone();
+    LightNLEDs(3);
+    break;
+  case MSG_SETUP_3:
+    SetColourNone();
+    LightNLEDs(4);
+    break;
+  /*case MSG_SETUP_4:
+    LightNLEDs(5);
+    break;*/
+
   default: // If an invalid character, do nothing
     Serial.print("Unable to parse command: ");
     Serial.println(cmd);
@@ -285,32 +330,62 @@ void parseCommand( char cmd )
 
 ////LED FUNCTIONS 
 void SetColourRed() {
-  SetColour(255,0,0);
+  SetColour(BRIGHTNESS,0,0);
 }
 void SetColourGreen() {
-  SetColour(0,255,0);
+  SetColour(0,BRIGHTNESS,0);
 }
 void SetColourYellow() {
-  SetColour(255,255,0);
+  SetColour(BRIGHTNESS,BRIGHTNESS,0);
 }
 void SetColourWhite() {
-  SetColour(255,255,255);
+  if(PINK_MOD)
+    SetColour(BRIGHTNESS*0.75,BRIGHTNESS,BRIGHTNESS);
+  else
+    SetColour(BRIGHTNESS,BRIGHTNESS,BRIGHTNESS);
 }
 void SetColourBlue() {
-  SetColour(0,0,255);
+  SetColour(0,0,BRIGHTNESS);
 }
 void SetColourNone() {
   SetColour(0,0,0);
 }
 void SetColour(int red, int green, int blue)
 {
-  for(int i=0;i<NUMPIXELS;i+=1){
+  for(int i=0;i<NUMPIXELS;i+=PIXEL_STEP){
+    
     // pixels.Color takes RGB values, from 0,0,0 up to 255,255,255
-    pixels.setPixelColor(i, pixels.Color(red, green, blue));
-      pixels.show(); // This sends the updated pixel color to the hardware.
+    if(i%PIXEL_STEP == 0)
+      pixels.setPixelColor(i, pixels.Color(red, green, blue));
+    else
+      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+     
+    pixels.show(); // This sends the updated pixel color to the hardware.
 
   }
 
+}
+
+void LightNLEDs(int num)
+{
+  if(num>=1)
+    LightLEDPosition(0, BRIGHTNESS,0,0);
+  if(num>=2)
+    LightLEDPosition(63, 0,BRIGHTNESS,0);
+  if(num>=3)
+    LightLEDPosition(7, 0,0,BRIGHTNESS);
+  if(num>=4)
+    LightLEDPosition(56, BRIGHTNESS,BRIGHTNESS,0);
+  if(num>=5)
+    LightLEDPosition(36,  255,255,255);
+
+}
+void LightLEDPosition(int pos, int red, int green, int blue)
+{
+  //Serial.println("Lighting Pixel num " + pos );
+  // pixels.Color takes RGB values, from 0,0,0 up to 255,255,255
+  pixels.setPixelColor(pos, pixels.Color(red, green, blue));
+  pixels.show(); // This sends the updated pixel color to the hardware.
 }
 
 // Note, this blocks
