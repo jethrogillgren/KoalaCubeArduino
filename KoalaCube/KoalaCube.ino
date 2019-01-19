@@ -1,6 +1,6 @@
 /*
  * --------------------------------------------------------------------------------------------------------------------
- * Controls local LED from server messages, and lets server know if it has found a Tag.
+ * Controls local LED from server messages, and lets server know if it has found a RFID Tag.
  * --------------------------------------------------------------------------------------------------------------------
  * 
  * This is the moving KoalaCube object code.
@@ -40,6 +40,8 @@ SoftwareSerial xbeeSerial(7, 6); // RX, TX
 //Works with Series1 and 2
 XBeeWithCallbacks xbee;
 
+#define MSG_RFID_REMOVED 'z'
+
 #define MSG_SET_COLOUR_BLUE   'B'
 #define MSG_SET_COLOUR_RED    'R'
 #define MSG_SET_COLOUR_GREEN  'G'
@@ -64,6 +66,8 @@ XBeeAddress64 coordinatorAddr = XBeeAddress64(0x00000000, 0x00000000);
 
 uint8_t placeMessagePayload[4] = {0};
 ZBTxRequest placeMessage = ZBTxRequest(coordinatorAddr, placeMessagePayload, sizeof(placeMessagePayload));
+uint8_t removedMessagePayload[1] = {0};
+ZBTxRequest removedMessage = ZBTxRequest(coordinatorAddr, removedMessagePayload, sizeof(removedMessagePayload));
 
 //RFID
 constexpr uint8_t RST_PIN = 9;          // Configurable, see typical pin layout above
@@ -73,8 +77,11 @@ MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 elapsedMillis timeElapsed; //declare global if you don't want it reset every time loop runs
 unsigned int sendInterval = 2000; // delay in milliseconds 
 
-
-
+bool isPlaced = false;
+int isPlacedAttempts = 0;
+bool previous;
+bool current;
+    
 void setup() {
   Serial.begin(9600);   // Initialize serial communications with the PC
   SPI.begin();      // Init SPI bus
@@ -111,7 +118,7 @@ void setup() {
 
   // Enable this to print the raw bytes for _all_ responses before they
   // are handled
-  xbee.onResponse(printRawResponseCb, (uintptr_t)(Print*)&Serial);
+  //xbee.onResponse(printRawResponseCb, (uintptr_t)(Print*)&Serial);
 
   if(PINK_MOD)
     Serial.println("Setup (PINK MOD) Completed OK");
@@ -139,38 +146,93 @@ void loop() {
     }
   }
   
-  //RFID
-  // Look for new cards
-  if ( ! mfrc522.PICC_IsNewCardPresent()) {
-    return;
-  }
-
-  Serial.println("A card is present");
-  
-  // Select one of the cards
-  if ( ! mfrc522.PICC_ReadCardSerial()) {
-    Serial.println("Could not read serial from card");
-    return;
-  }
-
-  // Show some details of the PICC (that is: the tag/card)
+  //// RFID
+  if(isPlaced)
+  {
+    //Poll the card twice because when placed it toggles
+    //betwen 1 and 0, and sticks to 0 only when removed.
+    previous = !mfrc522.PICC_IsNewCardPresent();
+    current =!mfrc522.PICC_IsNewCardPresent();
     
-  // Check for compatibility
-  MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
-  if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
-      &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
-      &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
-    Serial.println(F("Bad Card - needs MIFARE Classic cards."));
-    return;
-      
-  } else {
-      SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
-  }
+    if(current && previous)
+      isPlacedAttempts++; //We think we were 'removed'
+//    else //We toggled, indicating we are placed
+//      delay(200); //Throttle the next check to save power
 
+    //Check we're sure we were removed.
+    if(isPlacedAttempts >3 )
+    {
+      Serial.println("Removed from Pos");
+      isPlaced = false;
+      SendRemovedPacket();
+    }
+    else if (timeElapsed > sendInterval) 
+    {
+      SendCurrentPlacedPacket(); //Includes resetting timeElapsed.
+    }
+  }
+  else //Search for any new card
+  {
+    if ( ! mfrc522.PICC_IsNewCardPresent()) {
+      return;
+    }
+  
+    //Serial.println("A card is present");
+    
+    // Select one of the cards
+    if ( ! mfrc522.PICC_ReadCardSerial()) {
+      
+      Serial.println("Could not read serial from card");
+      return;
+    }
+  
+    // Show some details of the PICC (that is: the tag/card)
+      
+    // Check for compatibility
+    MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+    if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
+        &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
+        &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+      Serial.println(F("Bad Card - needs MIFARE Classic cards."));
+      return;
+        
+    }
+    else
+    {
+      Serial.println("Placed");
+      isPlaced = true;
+      isPlacedAttempts = 0;
+      SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
+      //Resends are handled in the 'checking for removal' loop.
+    }
+  }
 
   // Dump debug info about the card; PICC_HaltA() is automatically called
   //mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
+  
+  /*
+  previous = !mfrc522.PICC_IsNewCardPresent();
+  current =!mfrc522.PICC_IsNewCardPresent();
 
+  Serial.println(current);
+  return;
+  
+  while( !cardRemoved ) {
+    current =!mfrc522.PICC_IsNewCardPresent();
+
+    if (current && previous) counter++;
+
+    previous = current;
+    cardRemoved = (counter>2);      
+    delay(50);
+    Serial.println("Waiting for card to disappear");
+    Serial.println(counter);
+  }
+
+  Serial.println("Card Removed");
+  return;
+    */
+  
 }
 
 
@@ -213,9 +275,6 @@ void zbReceive(ZBRxResponse& rx, uintptr_t data) {
 }
 void SendPlacedPacket( byte *buffer, byte bufferSize )
 {
-  if (timeElapsed > sendInterval) 
-  {
-
     //We assume 4 byte UIDs
     if( bufferSize != 4 )
     {
@@ -224,13 +283,17 @@ void SendPlacedPacket( byte *buffer, byte bufferSize )
       return;
     }
     
-    /*Serial.println(F("SENDING UID:"));
+    //Serial.println(F("SENDING UID:"));
     for ( uint8_t i = 0; i < 4; i++) {  //
       placeMessagePayload[i] = buffer[i];
-      Serial.print(placeMessagePayload[i], HEX);
+      //Serial.print(placeMessagePayload[i], HEX);
     }
-    Serial.println();*/
+    //Serial.println();
   
+    SendCurrentPlacedPacket();
+}
+void SendCurrentPlacedPacket()
+{
     placeMessage.setFrameId(xbee.getNextFrameId());
     
     //Serial.println("SENDING 'Placed' Message to Co-ordinator");
@@ -249,10 +312,26 @@ void SendPlacedPacket( byte *buffer, byte bufferSize )
       Serial.println();
       //flashSingleLed(LED_BUILTIN, 3, 500);
     }
-    
-  }
 }
+void SendRemovedPacket()
+{
+  removedMessagePayload[0] = MSG_RFID_REMOVED;
 
+  removedMessage.setFrameId(xbee.getNextFrameId());
+     
+  //Serial.println("SENDING 'Removed' Message to Co-ordinator");
+  //xbee.send(removedMessage);
+  
+  // Send the command and wait up to N ms for a response.  xbee loop continues during this time.
+  uint8_t status = xbee.sendAndWait(removedMessage, 1000);
+  if (status != 0){
+    Serial.print(F("REMOVE PACKET SEND FAILED: "));
+    printHex(status, 2);
+    Serial.println();
+    //flashSingleLed(LED_BUILTIN, 3, 500);
+  }
+  
+}
 // Parse serial input, take action if it's a valid character
 void parseCommand( char cmd )
 {
