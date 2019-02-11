@@ -75,7 +75,7 @@ constexpr uint8_t SS_PIN = 10;         // Configurable, see typical pin layout a
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 
 elapsedMillis timeElapsed; //declare global if you don't want it reset every time loop runs
-unsigned int sendInterval = 2000; // delay in milliseconds 
+unsigned int sendInterval = 10000; // delay in milliseconds 
 
 bool isPlaced = false;
 int isPlacedAttempts = 0;
@@ -96,7 +96,7 @@ void setup() {
   SetColourWhite();
   delay(1000);
   SetColourNone();
-  LightLEDPosition(27,  BRIGHTNESS,BRIGHTNESS,BRIGHTNESS);
+  //LightLEDPosition(27,  BRIGHTNESS,BRIGHTNESS,BRIGHTNESS);
   //SetColourGreen();
 
   // XBEE
