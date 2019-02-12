@@ -13,7 +13,7 @@
 #include <Printers.h>
 #include <elapsedMillis.h>
 
-#include <Adafruit_NeoPixel.h>
+#include <Adafruit_NeoPixel.h> //1.1.6 by adafruit
 
 
 //LEDS
@@ -27,7 +27,7 @@ bool PINK_MOD = false;
 //Default max brightness (0-255)
 #define BRIGHTNESS 50
 //Number of pixels to miss to save power.
-#define PIXEL_STEP 1
+#define PIXEL_STEP 3
 // When we setup the NeoPixel library, we tell it how many pixels, and which pin to use to send signals.
 // Note that for older NeoPixel strips you might need to change the third parameter--see the strandtest
 // example for more information on possible values.
@@ -96,8 +96,14 @@ void setup() {
   SetColourWhite();
   delay(1000);
   SetColourNone();
-  //LightLEDPosition(27,  BRIGHTNESS,BRIGHTNESS,BRIGHTNESS);
+  
+  LightLEDPosition(28,  BRIGHTNESS,BRIGHTNESS,BRIGHTNESS);
   //SetColourGreen();
+
+  delay(5000);
+  SetColourNone();
+  delay(1000);
+  parseCommand('0');
 
   // XBEE
   xbeeSerial.begin(9600);
