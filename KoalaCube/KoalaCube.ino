@@ -24,8 +24,15 @@ bool PINK_MOD = false;
 // How many NeoPixels are attached to the Arduino?
 #define NUMPIXELS      64
 
+
+float lastFlickerBrightness = 0;
+float currentFlickerBrightness = 0;
+int flickerDelay = 0;
+int lastFlickerDelay = 0;
+bool flickerHeadingUp = false;
+
 //Default max brightness (0-255)
-#define BRIGHTNESS 50
+#define DEFAULT_BRIGHTNESS 50
 //Number of pixels to miss to save power.
 #define PIXEL_STEP 3
 // When we setup the NeoPixel library, we tell it how many pixels, and which pin to use to send signals.
@@ -50,7 +57,7 @@ XBeeWithCallbacks xbee;
 #define MSG_SET_COLOUR_NONE   'N'
 
 unsigned int flickerState = 2; // 0:low power  1:medium power  2:full power
-int flickerDelay = 0;
+
 #define MSG_SET_FLICKER_0 '0'
 #define MSG_SET_FLICKER_1 '1'
 #define MSG_SET_FLICKER_2 '2'
@@ -97,13 +104,7 @@ void setup() {
   delay(1000);
   SetColourNone();
   
-  LightLEDPosition(28,  BRIGHTNESS,BRIGHTNESS,BRIGHTNESS);
-  //SetColourGreen();
-
-  delay(5000);
-  SetColourNone();
-  delay(1000);
-  parseCommand('0');
+  //LightLEDPosition(27,  DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
 
   // XBEE
   xbeeSerial.begin(9600);
@@ -139,17 +140,52 @@ void loop() {
   xbee.loop();
 
 
-  //LEDS
+  //LEDS flickering
+  //0:low flickering power   1:medium flickering power   2:full stable power
   if( flickerState < 2 )
   {
+    //Count down until we start a new flash.
     flickerDelay--;
-    delay(50);
+    
+    //Time to start a new flash
     if(flickerDelay <= 0)
-    {
-      flickerDelay = random(10, 50);
-      int val = random(0, 30) + (flickerState*20);
-      SetColour( random(10, 50), random(10, 50), random(10, 50) );
+    { 
+      //We flash at semi-random intervals
+      if(lastFlickerDelay < 10)
+        flickerHeadingUp = true;
+      else if (lastFlickerDelay > 40)
+        flickerHeadingUp = false;
+
+      if(flickerHeadingUp)
+        flickerDelay = random(lastFlickerDelay, 50);
+      else
+        flickerDelay = random(0, lastFlickerDelay);
+
+      lastFlickerDelay = flickerDelay;
+        
+      if(flickerDelay == 0)
+        lastFlickerBrightness = random(0, DEFAULT_BRIGHTNESS/3);
+      else if(flickerState == 1);
+        lastFlickerBrightness = random(0, DEFAULT_BRIGHTNESS);
+        
+      SetColourWhite( lastFlickerBrightness );
+      currentFlickerBrightness = lastFlickerBrightness;
     }
+    else if( currentFlickerBrightness > 1 ) //Process the current flash.
+    {
+      if(flickerState==0)
+        currentFlickerBrightness=currentFlickerBrightness*0.5;
+      else
+        currentFlickerBrightness=currentFlickerBrightness*0.8;
+        
+      SetColourWhite( currentFlickerBrightness );
+    }
+    //else we are in a pause.
+
+    if(flickerState==0)
+      delay(30);
+    else
+      delay(5);
   }
   
   //// RFID
@@ -256,7 +292,6 @@ void zbReceive(ZBRxResponse& rx, uintptr_t data) {
       Print *p = (Print*)data;
       if (!p) {
         Serial.println("ERROR 2");
-        //flashSingleLed(LED_BUILTIN, 2, 500);
         return;
       }
       /*p->println(F("Recieved:"));
@@ -271,12 +306,10 @@ void zbReceive(ZBRxResponse& rx, uintptr_t data) {
       printHex(rx.getData()[0], 2);
       parseCommand( (char) rx.getData()[0] );
       
-      //flashSingleLed(LED_BUILTIN, 5, 50);
       
   } else {
       // we got it (obviously) but sender didn't get an ACK
       Serial.println("ERROR 1");
-      //flashSingleLed(LED_BUILTIN, 1, 500);
   }
 }
 void SendPlacedPacket( byte *buffer, byte bufferSize )
@@ -316,7 +349,6 @@ void SendCurrentPlacedPacket()
       Serial.print(F("SEND FAILED: "));
       printHex(status, 2);
       Serial.println();
-      //flashSingleLed(LED_BUILTIN, 3, 500);
     }
 }
 void SendRemovedPacket()
@@ -334,7 +366,6 @@ void SendRemovedPacket()
     Serial.print(F("REMOVE PACKET SEND FAILED: "));
     printHex(status, 2);
     Serial.println();
-    //flashSingleLed(LED_BUILTIN, 3, 500);
   }
   
 }
@@ -420,22 +451,28 @@ void parseCommand( char cmd )
 
 ////LED FUNCTIONS 
 void SetColourRed() {
-  SetColour(BRIGHTNESS,0,0);
+  SetColour(DEFAULT_BRIGHTNESS,0,0);
 }
 void SetColourGreen() {
-  SetColour(0,BRIGHTNESS,0);
+  SetColour(0,DEFAULT_BRIGHTNESS,0);
 }
 void SetColourYellow() {
-  SetColour(BRIGHTNESS,BRIGHTNESS,0);
+  SetColour(DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS,0);
 }
 void SetColourWhite() {
   if(PINK_MOD)
-    SetColour(BRIGHTNESS*0.75,BRIGHTNESS,BRIGHTNESS);
+    SetColour(DEFAULT_BRIGHTNESS*0.75,DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
   else
-    SetColour(BRIGHTNESS,BRIGHTNESS,BRIGHTNESS);
+    SetColour(DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
+}
+void SetColourWhite(float brightness) {
+  if(PINK_MOD)
+    SetColour(brightness*0.75,brightness,brightness);
+  else
+    SetColour(brightness,brightness,brightness);
 }
 void SetColourBlue() {
-  SetColour(0,0,BRIGHTNESS);
+  SetColour(0,0,DEFAULT_BRIGHTNESS);
 }
 void SetColourNone() {
   SetColour(0,0,0);
@@ -459,13 +496,13 @@ void SetColour(int red, int green, int blue)
 void LightNLEDs(int num)
 {
   if(num>=1)
-    LightLEDPosition(0, BRIGHTNESS,0,0);
+    LightLEDPosition(0, DEFAULT_BRIGHTNESS,0,0);
   if(num>=2)
-    LightLEDPosition(63, 0,BRIGHTNESS,0);
+    LightLEDPosition(63, 0,DEFAULT_BRIGHTNESS,0);
   if(num>=3)
-    LightLEDPosition(7, 0,0,BRIGHTNESS);
+    LightLEDPosition(7, 0,0,DEFAULT_BRIGHTNESS);
   if(num>=4)
-    LightLEDPosition(56, BRIGHTNESS,BRIGHTNESS,0);
+    LightLEDPosition(56, DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS,0);
   if(num>=5)
     LightLEDPosition(36,  255,255,255);
 
@@ -490,19 +527,6 @@ void LightLEDPosition(int pos, int red, int green, int blue)
   pixels.show(); // This sends the updated pixel color to the hardware.
 }
 
-// Note, this blocks
-void flashSingleLed(int pin, int times, int wait) {
-
-  for (int i = 0; i < times; i++) {
-    digitalWrite(pin, HIGH);
-    delay(wait);
-    digitalWrite(pin, LOW);
-
-    if (i + 1 < times) {
-      delay(wait);
-    }
-  }
-}
 
 // UTIL FUNCTIONS
 void printHex(int num, int precision) {
