@@ -340,22 +340,27 @@ void parseCommand( char cmd )
   switch (cmd)
   {
   case MSG_SET_COLOUR_RED: 
+    SetColourNone();
     SetColourRed();
     break;
 
   case MSG_SET_COLOUR_BLUE: 
+    SetColourNone();
     SetColourBlue();
     break;
 
   case MSG_SET_COLOUR_WHITE: 
+    SetColourNone();
     SetColourWhite();
     break;
 
   case MSG_SET_COLOUR_GREEN: 
+    SetColourNone();
     SetColourGreen();
     break;
 
   case MSG_SET_COLOUR_YELLOW: 
+    SetColourNone();
     SetColourYellow();
     break;
 
@@ -461,7 +466,19 @@ void LightNLEDs(int num)
 }
 void LightLEDPosition(int pos, int red, int green, int blue)
 {
-  //Serial.println("Lighting Pixel num " + pos );
+  while( pos % PIXEL_STEP != 0 )
+  {
+    Serial.print("Finding nearest pixel to ");
+    Serial.print(pos);
+    Serial.print(" which fits into NUMPIXELS: ");
+    Serial.println(NUMPIXELS);
+    if( pos> (NUMPIXELS/2) )
+      pos--;
+    else
+      pos++;
+  }
+  
+  Serial.println("Lighting Pixel num " + pos );
   // pixels.Color takes RGB values, from 0,0,0 up to 255,255,255
   pixels.setPixelColor(pos, pixels.Color(red, green, blue));
   pixels.show(); // This sends the updated pixel color to the hardware.
