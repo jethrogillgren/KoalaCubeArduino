@@ -17,13 +17,14 @@
 
 
 //LEDS
-bool PINK_MOD = false;
+bool PINK_MOD = true;
 // Which pin on the Arduino is connected to the NeoPixels?
 // On a Trinket or Gemma we suggest changing this to 1
 #define PIN            3
 // How many NeoPixels are attached to the Arduino?
 #define NUMPIXELS      64
 
+unsigned int flickerState = 2; // 0:low power  1:medium power  2:full power
 
 float lastFlickerBrightness = 0;
 float currentFlickerBrightness = 0;
@@ -55,8 +56,6 @@ XBeeWithCallbacks xbee;
 #define MSG_SET_COLOUR_WHITE  'W'
 #define MSG_SET_COLOUR_YELLOW 'Y'
 #define MSG_SET_COLOUR_NONE   'N'
-
-unsigned int flickerState = 2; // 0:low power  1:medium power  2:full power
 
 #define MSG_SET_FLICKER_0 '0'
 #define MSG_SET_FLICKER_1 '1'
@@ -104,7 +103,19 @@ void setup() {
   delay(1000);
   SetColourNone();
   
-  //LightLEDPosition(27,  DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
+  //LightLEDPosition(27,  DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS, true);
+  /*delay(100);
+  LightNLEDs(1);
+  delay(1000);
+  LightNLEDs(2);
+  delay(1000);
+  LightNLEDs(3);
+delay(1000);
+  LightNLEDs(4);
+  delay(1000);
+  LightNLEDs(5);
+  delay(1000);
+  SetColourNone();*/
 
   // XBEE
   xbeeSerial.begin(9600);
@@ -219,7 +230,7 @@ void loop() {
       return;
     }
   
-    //Serial.println("A card is present");
+    Serial.println("A card is present");
     
     // Select one of the cards
     if ( ! mfrc522.PICC_ReadCardSerial()) {
@@ -475,14 +486,20 @@ void SetColourBlue() {
   SetColour(0,0,DEFAULT_BRIGHTNESS);
 }
 void SetColourNone() {
-  SetColour(0,0,0);
+  SetColour(0,0,0, false);
 }
+
 void SetColour(int red, int green, int blue)
 {
-  for(int i=0;i<NUMPIXELS;i+=PIXEL_STEP){
+  SetColour(red, green, blue, true);
+}
+
+void SetColour(int red, int green, int blue, bool usePixelStep)
+{
+  for(int i=0;i<NUMPIXELS;i++){
     
     // pixels.Color takes RGB values, from 0,0,0 up to 255,255,255
-    if(i%PIXEL_STEP == 0)
+    if( usePixelStep == false || i%PIXEL_STEP == 0)
       pixels.setPixelColor(i, pixels.Color(red, green, blue));
     else
       pixels.setPixelColor(i, pixels.Color(0, 0, 0));
@@ -496,29 +513,32 @@ void SetColour(int red, int green, int blue)
 void LightNLEDs(int num)
 {
   if(num>=1)
-    LightLEDPosition(0, DEFAULT_BRIGHTNESS,0,0);
+    LightLEDPosition(0, DEFAULT_BRIGHTNESS,0,0, false);
   if(num>=2)
-    LightLEDPosition(63, 0,DEFAULT_BRIGHTNESS,0);
+    LightLEDPosition(63, 0,DEFAULT_BRIGHTNESS,0, false);
   if(num>=3)
-    LightLEDPosition(7, 0,0,DEFAULT_BRIGHTNESS);
+    LightLEDPosition(7, 0,0,DEFAULT_BRIGHTNESS, false);
   if(num>=4)
-    LightLEDPosition(56, DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS,0);
+    LightLEDPosition(56, DEFAULT_BRIGHTNESS,DEFAULT_BRIGHTNESS,0, false);
   if(num>=5)
-    LightLEDPosition(36,  255,255,255);
+    LightLEDPosition(36,  255,255,255, false);
 
 }
-void LightLEDPosition(int pos, int red, int green, int blue)
+void LightLEDPosition(int pos, int red, int green, int blue, bool usePixelStep )
 {
-  while( pos % PIXEL_STEP != 0 )
+  if(usePixelStep)
   {
-    Serial.print("Finding nearest pixel to ");
-    Serial.print(pos);
-    Serial.print(" which fits into NUMPIXELS: ");
-    Serial.println(NUMPIXELS);
-    if( pos> (NUMPIXELS/2) )
-      pos--;
-    else
-      pos++;
+    while( pos % PIXEL_STEP != 0 )
+    {
+      Serial.print("Finding nearest pixel to ");
+      Serial.print(pos);
+      Serial.print(" which fits into NUMPIXELS: ");
+      Serial.println(NUMPIXELS);
+      if( pos> (NUMPIXELS/2) )
+        pos--;
+      else
+        pos++;
+    }
   }
   
   Serial.println("Lighting Pixel num " + pos );
