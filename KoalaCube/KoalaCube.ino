@@ -24,7 +24,6 @@ bool PINK_MOD = true;
 // How many NeoPixels are attached to the Arduino?
 #define NUMPIXELS      64
 
-unsigned int flickerState = 2; // 0:low power  1:medium power  2:full power
 
 float lastFlickerBrightness = 0;
 float currentFlickerBrightness = 0;
@@ -56,6 +55,8 @@ XBeeWithCallbacks xbee;
 #define MSG_SET_COLOUR_WHITE  'W'
 #define MSG_SET_COLOUR_YELLOW 'Y'
 #define MSG_SET_COLOUR_NONE   'N'
+
+unsigned int flickerState = 2; // 0:low power  1:medium power  2:full power
 
 #define MSG_SET_FLICKER_0 '0'
 #define MSG_SET_FLICKER_1 '1'
@@ -91,9 +92,9 @@ bool current;
 void setup() {
   Serial.begin(9600);   // Initialize serial communications with the PC
   SPI.begin();      // Init SPI bus
-  mfrc522.PCD_SetAntennaGain( 0x07 << 4 );
+  mfrc522.PCD_SetAntennaGain( 0x07 << 4 ); //PCD_RxGain.RxGain_max
   mfrc522.PCD_Init();   // Init MFRC522
-  mfrc522.PCD_SetAntennaGain( 0x07 << 4 );
+  mfrc522.PCD_SetAntennaGain( 0x07 << 4 ); //PCD_RxGain.RxGain_max
   timeElapsed = sendInterval;
   mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
 
@@ -230,7 +231,7 @@ void loop() {
       return;
     }
   
-    Serial.println("A card is present");
+    //Serial.println("A card is present");
     
     // Select one of the cards
     if ( ! mfrc522.PICC_ReadCardSerial()) {
