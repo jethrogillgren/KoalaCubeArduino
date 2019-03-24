@@ -15,9 +15,8 @@
 
 #include <Adafruit_NeoPixel.h> //1.1.6 by adafruit
 
-
 //LEDS
-bool PINK_MOD = true;
+bool PINK_MOD = false;
 // Which pin on the Arduino is connected to the NeoPixels?
 // On a Trinket or Gemma we suggest changing this to 1
 #define PIN            3
@@ -147,15 +146,19 @@ delay(1000);
 
 void loop() {
 
+  Serial.println("Check XBee");
+  
   //XBEE
   // Continuously let xbee read packets and call callbacks.
   xbee.loop();
+
 
 
   //LEDS flickering
   //0:low flickering power   1:medium flickering power   2:full stable power
   if( flickerState < 2 )
   {
+    Serial.println("flicker");
     //Count down until we start a new flash.
     flickerDelay--;
     
@@ -203,6 +206,7 @@ void loop() {
   //// RFID
   if(isPlaced)
   {
+    Serial.println("check for remove");
     //Poll the card twice because when placed it toggles
     //betwen 1 and 0, and sticks to 0 only when removed.
     previous = !mfrc522.PICC_IsNewCardPresent();
@@ -219,15 +223,20 @@ void loop() {
       Serial.println("Removed from Pos");
       isPlaced = false;
       SendRemovedPacket();
+      LightLEDPosition(28,  0,0,100, false);
     }
     else if (timeElapsed > sendInterval) 
     {
       SendCurrentPlacedPacket(); //Includes resetting timeElapsed.
+      LightLEDPosition(28,  0,100,0, false);
     }
   }
   else //Search for any new card
   {
-    if ( ! mfrc522.PICC_IsNewCardPresent()) {
+    Serial.println("check for place");
+    if ( ! mfrc522.PICC_IsNewCardPresent())
+    {
+      Serial.println("No card present");
       return;
     }
   
@@ -235,7 +244,7 @@ void loop() {
     
     // Select one of the cards
     if ( ! mfrc522.PICC_ReadCardSerial()) {
-      
+      LightLEDPosition(28,  100,0,0, false);
       Serial.println("Could not read serial from card");
       return;
     }
@@ -247,6 +256,7 @@ void loop() {
     if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
         &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
         &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+          LightLEDPosition(28,  100,0,0, false);
       Serial.println(F("Bad Card - needs MIFARE Classic cards."));
       return;
         
@@ -256,36 +266,35 @@ void loop() {
       Serial.println("Placed");
       isPlaced = true;
       isPlacedAttempts = 0;
-      SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
-      //Resends are handled in the 'checking for removal' loop.
+      LightLEDPosition(28,  0,100,0, false);
+
+      
+      //Check for RESET RFID
+      if(mfrc522.uid.size == 4 && mfrc522.uid.uidByte[0] == 0x46 && mfrc522.uid.uidByte[1] == 0x7E
+          && mfrc522.uid.uidByte[2] == 0xC6 && mfrc522.uid.uidByte[3] == 0x96)
+      {
+        Serial.println("RESET RFID Activated");
+        delay(100);
+        software_Reset();
+      }
+      else if (mfrc522.uid.size == 4 && mfrc522.uid.uidByte[0] == 0xA6 && mfrc522.uid.uidByte[1] == 0x9C
+          && mfrc522.uid.uidByte[2] == 0x1F && mfrc522.uid.uidByte[3] == 0xB9)
+      {
+        Serial.println("LED TEST Activated");
+        delay(100);
+        SetColour(255,255,255,false);
+        delay(2000);
+        SetColourNone();
+      }
+      else  //Normal RFID, let's send it
+      {
+        SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
+        //Resends are handled in the 'checking for removal' loop.
+      }
     }
+
+    Serial.println("loop done");
   }
-
-  // Dump debug info about the card; PICC_HaltA() is automatically called
-  //mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
-  
-  /*
-  previous = !mfrc522.PICC_IsNewCardPresent();
-  current =!mfrc522.PICC_IsNewCardPresent();
-
-  Serial.println(current);
-  return;
-  
-  while( !cardRemoved ) {
-    current =!mfrc522.PICC_IsNewCardPresent();
-
-    if (current && previous) counter++;
-
-    previous = current;
-    cardRemoved = (counter>2);      
-    delay(50);
-    Serial.println("Waiting for card to disappear");
-    Serial.println(counter);
-  }
-
-  Serial.println("Card Removed");
-  return;
-    */
   
 }
 
@@ -306,13 +315,13 @@ void zbReceive(ZBRxResponse& rx, uintptr_t data) {
         Serial.println("ERROR 2");
         return;
       }
-      /*p->println(F("Recieved:"));
+      p->println(F("Recieved:"));
         p->print("  Payload: ");
         printHex(*p, rx.getFrameData() + rx.getDataOffset(), rx.getDataLength(), F(" "), F("\r\n    "), 8);
       p->println();
         p->print("  From: ");
         printHex(*p, rx.getRemoteAddress64() );
-      p->println();*/
+      p->println();
 
       //KoalaCubes only take 1 char commands
       printHex(rx.getData()[0], 2);
@@ -334,12 +343,12 @@ void SendPlacedPacket( byte *buffer, byte bufferSize )
       return;
     }
     
-    //Serial.println(F("SENDING UID:"));
+    Serial.println(F("SENDING UID:"));
     for ( uint8_t i = 0; i < 4; i++) {  //
       placeMessagePayload[i] = buffer[i];
-      //Serial.print(placeMessagePayload[i], HEX);
+      Serial.print(placeMessagePayload[i], HEX);
     }
-    //Serial.println();
+    Serial.println();
   
     SendCurrentPlacedPacket();
 }
@@ -347,7 +356,7 @@ void SendCurrentPlacedPacket()
 {
     placeMessage.setFrameId(xbee.getNextFrameId());
     
-    //Serial.println("SENDING 'Placed' Message to Co-ordinator");
+    Serial.println("SENDING 'Placed' Message to Co-ordinator");
     //xbee.send(placeMessage);
     
     // Send the command and wait up to N ms for a response.  xbee loop continues during this time.
@@ -369,7 +378,7 @@ void SendRemovedPacket()
 
   removedMessage.setFrameId(xbee.getNextFrameId());
      
-  //Serial.println("SENDING 'Removed' Message to Co-ordinator");
+  Serial.println("SENDING 'Removed' Message to Co-ordinator");
   //xbee.send(removedMessage);
   
   // Send the command and wait up to N ms for a response.  xbee loop continues during this time.
@@ -389,27 +398,22 @@ void parseCommand( char cmd )
   switch (cmd)
   {
   case MSG_SET_COLOUR_RED: 
-    SetColourNone();
     SetColourRed();
     break;
 
   case MSG_SET_COLOUR_BLUE: 
-    SetColourNone();
     SetColourBlue();
     break;
 
   case MSG_SET_COLOUR_WHITE: 
-    SetColourNone();
     SetColourWhite();
     break;
 
   case MSG_SET_COLOUR_GREEN: 
-    SetColourNone();
     SetColourGreen();
     break;
 
   case MSG_SET_COLOUR_YELLOW: 
-    SetColourNone();
     SetColourYellow();
     break;
 
@@ -487,7 +491,7 @@ void SetColourBlue() {
   SetColour(0,0,DEFAULT_BRIGHTNESS);
 }
 void SetColourNone() {
-  SetColour(0,0,0, false);
+  SetColour(0,0,0);
 }
 
 void SetColour(int red, int green, int blue)
@@ -559,3 +563,9 @@ void printHex(int num, int precision) {
      sprintf(tmp, format, num);
      Serial.print(tmp);
 }
+
+// Restarts program from beginning but does not reset the peripherals and registers
+void software_Reset() 
+{
+  asm volatile ("  jmp 0");  
+}  
