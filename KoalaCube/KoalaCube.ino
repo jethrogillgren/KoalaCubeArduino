@@ -87,15 +87,15 @@ bool isPlaced = false;
 int isPlacedAttempts = 0;
 bool previous;
 bool current;
+
+int errorCnt = 0;
     
 void setup() {
   Serial.begin(9600);   // Initialize serial communications with the PC
   SPI.begin();      // Init SPI bus
-  mfrc522.PCD_SetAntennaGain( 0x07 << 4 ); //PCD_RxGain.RxGain_max
-  mfrc522.PCD_Init();   // Init MFRC522
-  mfrc522.PCD_SetAntennaGain( 0x07 << 4 ); //PCD_RxGain.RxGain_max
-  timeElapsed = sendInterval;
-  mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
+
+  //RFID Reader
+  InitRFIDReader(); //Will continiously retry (blocking) if init fails.
 
   //RGB LED
   pixels.begin(); // This initializes the NeoPixel library.
@@ -146,7 +146,7 @@ delay(1000);
 
 void loop() {
 
-  Serial.println("Check XBee");
+  //Serial.println("Check XBee");
   
   //XBEE
   // Continuously let xbee read packets and call callbacks.
@@ -158,7 +158,7 @@ void loop() {
   //0:low flickering power   1:medium flickering power   2:full stable power
   if( flickerState < 2 )
   {
-    Serial.println("flicker");
+    //Serial.println("flicker");
     //Count down until we start a new flash.
     flickerDelay--;
     
@@ -206,7 +206,7 @@ void loop() {
   //// RFID
   if(isPlaced)
   {
-    Serial.println("check for remove");
+    //Serial.println("check for remove");
     //Poll the card twice because when placed it toggles
     //betwen 1 and 0, and sticks to 0 only when removed.
     previous = !mfrc522.PICC_IsNewCardPresent();
@@ -233,13 +233,131 @@ void loop() {
   }
   else //Search for any new card
   {
-    Serial.println("check for place");
+    //Serial.println("check for place");
+
+    //Replicate mfrc522.PICC_IsNewCardPresent() and PICC_ReadCardSerial() but with extra debug
+
+    byte bufferATQA[2];
+    byte bufferSize = sizeof(bufferATQA);
+  
+    // Reset baud rates
+    mfrc522.PCD_WriteRegister(MFRC522::TxModeReg, 0x00);
+    mfrc522.PCD_WriteRegister(MFRC522::RxModeReg, 0x00);
+    // Reset ModWidthReg
+    mfrc522.PCD_WriteRegister(MFRC522::ModWidthReg, 0x26);
+
+    //Check for card.
+    MFRC522::StatusCode reqAResult = mfrc522.PICC_RequestA(bufferATQA, &bufferSize);
+
+    if(reqAResult == MFRC522::STATUS_OK)
+    {
+      Serial.println("RequestA got STATUS_OK");
+      
+      MFRC522::StatusCode selectResult = mfrc522.PICC_Select(&mfrc522.uid);
+      if (selectResult == MFRC522::STATUS_OK)
+      {
+        // Check for compatibility
+        MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+        if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
+            &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
+            &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K)
+        {
+          Serial.println(F("Bad Card - needs MIFARE Classic cards."));
+          LightLEDPosition(28,  100,0,0, false);
+          CheckResetRFID();
+          return;
+        }
+        else //We read OK!
+        {
+          Serial.println("Placed");
+          isPlaced = true;
+          isPlacedAttempts = 0;
+          errorCnt = 0;
+          LightLEDPosition(28,  0,100,0, false); //Green OK Led.
+    
+          
+          //Check for RESET RFID
+          if(mfrc522.uid.size == 4 && mfrc522.uid.uidByte[0] == 0x46 && mfrc522.uid.uidByte[1] == 0x7E
+              && mfrc522.uid.uidByte[2] == 0xC6 && mfrc522.uid.uidByte[3] == 0x96)
+          {
+            Serial.println("RESET RFID Activated");
+            delay(100);
+            software_Reset();
+          }
+          else if (mfrc522.uid.size == 4 && mfrc522.uid.uidByte[0] == 0xA6 && mfrc522.uid.uidByte[1] == 0x9C
+              && mfrc522.uid.uidByte[2] == 0x1F && mfrc522.uid.uidByte[3] == 0xB9)
+          {
+            Serial.println("LED TEST Activated");
+            delay(100);
+            SetColour(255,255,255,false);
+            delay(2000);
+            SetColourNone();
+          }
+          else  //Normal RFID, let's send it
+          {
+            SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
+            //Resends are handled in the 'checking for removal' loop.
+          }
+        }
+      }
+      else //Failed to select card data.
+      {
+        Serial.print("PICC_Select failed with:");
+        Serial.println( mfrc522.GetStatusCodeName(selectResult) );
+        LightLEDPosition(28,  100,0,0, false); //Red warning LED
+
+        CheckResetRFID();
+      }
+    
+    }
+    else if(reqAResult != MFRC522::STATUS_TIMEOUT ) //Failed to find card.
+    {
+      Serial.print("RequestA failed with:");
+      Serial.println( mfrc522.GetStatusCodeName(reqAResult) );
+      LightLEDPosition(28,  100,0,0, false); //Red warning LED
+
+      CheckResetRFID();
+    }
+    /*else
+    {
+      Serial.println("No card - RequestA Timed out");
+    }*/
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    /*
     if ( ! mfrc522.PICC_IsNewCardPresent())
     {
-      Serial.println("No card present");
+      Serial.print("No card present.  debug_cnt: ");
+      Serial.println(debug_cnt);
+
+      debug_cnt++;
+      if(debug_cnt>200)
+      {
+        Serial.println("DEBUG No card present for too long - resetting ---------------------------------");
+
+        debug_cnt = 0;
+        mfrc522.PCD_Reset();
+        InitRFIDReader();
+      }
       return;
     }
-  
+    
+    debug_cnt = 0;
     //Serial.println("A card is present");
     
     // Select one of the cards
@@ -250,54 +368,58 @@ void loop() {
     }
   
     // Show some details of the PICC (that is: the tag/card)
-      
-    // Check for compatibility
-    MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
-    if (    piccType != MFRC522::PICC_TYPE_MIFARE_MINI
-        &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
-        &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
-          LightLEDPosition(28,  100,0,0, false);
-      Serial.println(F("Bad Card - needs MIFARE Classic cards."));
-      return;
-        
-    }
-    else
-    {
-      Serial.println("Placed");
-      isPlaced = true;
-      isPlacedAttempts = 0;
-      LightLEDPosition(28,  0,100,0, false);
-
-      
-      //Check for RESET RFID
-      if(mfrc522.uid.size == 4 && mfrc522.uid.uidByte[0] == 0x46 && mfrc522.uid.uidByte[1] == 0x7E
-          && mfrc522.uid.uidByte[2] == 0xC6 && mfrc522.uid.uidByte[3] == 0x96)
-      {
-        Serial.println("RESET RFID Activated");
-        delay(100);
-        software_Reset();
-      }
-      else if (mfrc522.uid.size == 4 && mfrc522.uid.uidByte[0] == 0xA6 && mfrc522.uid.uidByte[1] == 0x9C
-          && mfrc522.uid.uidByte[2] == 0x1F && mfrc522.uid.uidByte[3] == 0xB9)
-      {
-        Serial.println("LED TEST Activated");
-        delay(100);
-        SetColour(255,255,255,false);
-        delay(2000);
-        SetColourNone();
-      }
-      else  //Normal RFID, let's send it
-      {
-        SendPlacedPacket(mfrc522.uid.uidByte, mfrc522.uid.size);
-        //Resends are handled in the 'checking for removal' loop.
-      }
-    }
-
-    Serial.println("loop done");
   }
-  
+*/
+
+
+  //Serial.println("loop done");
 }
 
+
+void CheckResetRFID()
+{
+  errorCnt++;
+  if( errorCnt > 6 )
+  {
+    errorCnt = 0;
+    Serial.println("RESETTING RFID");
+    mfrc522.PCD_Reset();
+    InitRFIDReader(); //Will continiously retry (blocking) if init fails.
+    delay(2000);
+  }
+}
+
+void InitRFIDReader()
+{
+  Serial.println("Initializing the RFID Reader.");
+
+  mfrc522.PCD_SetAntennaGain( 0x07 << 4 ); //PCD_RxGain.RxGain_max
+  mfrc522.PCD_Init();   // Init MFRC522
+  mfrc522.PCD_SetAntennaGain( 0x07 << 4 ); //PCD_RxGain.RxGain_max
+  timeElapsed = sendInterval;
+  //mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
+
+
+  // Check it went OK.
+  byte v = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
+  Serial.print(F("Firmware Version: 0x"));
+  Serial.print(v, HEX);
+  // Lookup which version
+  switch(v) {
+    case 0x88: Serial.println(F(" = (clone)"));  break;
+    case 0x90: Serial.println(F(" = v0.0"));     break;
+    case 0x91: Serial.println(F(" = v1.0"));     break;
+    case 0x92: Serial.println(F(" = v2.0"));     break;
+    default:   Serial.println(F(" = (unknown)"));
+  }
+  
+  if ((v == 0x00) || (v == 0xFF) || (v == 0x80)) //Bad reads, or 'UNKNOWN'
+  {
+    Serial.println(F("WARNING: Communication failure when Initializing the RFID reader.  Will sleep for 2000ms and retry."));
+    delay(2000);
+    InitRFIDReader();
+  }
+}
 
 
 
