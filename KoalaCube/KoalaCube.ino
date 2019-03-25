@@ -147,11 +147,11 @@ delay(1000);
 void loop() {
 
   //Serial.println("Check XBee");
+
   
   //XBEE
   // Continuously let xbee read packets and call callbacks.
   xbee.loop();
-
 
 
   //LEDS flickering
@@ -202,6 +202,7 @@ void loop() {
     else
       delay(5);
   }
+
   
   //// RFID
   if(isPlaced)
@@ -223,12 +224,12 @@ void loop() {
       Serial.println("Removed from Pos");
       isPlaced = false;
       SendRemovedPacket();
-      LightLEDPosition(28,  0,0,100, false);
+      //LightLEDPosition(28,  0,0,100, false); //BLue IDLE indicator
     }
     else if (timeElapsed > sendInterval) 
     {
       SendCurrentPlacedPacket(); //Includes resetting timeElapsed.
-      LightLEDPosition(28,  0,100,0, false);
+      //LightLEDPosition(28,  0,100,0, false); //Green Placed indicator
     }
   }
   else //Search for any new card
@@ -251,7 +252,7 @@ void loop() {
 
     if(reqAResult == MFRC522::STATUS_OK)
     {
-      Serial.println("RequestA got STATUS_OK");
+      //Serial.println("RequestA got STATUS_OK");
       
       MFRC522::StatusCode selectResult = mfrc522.PICC_Select(&mfrc522.uid);
       if (selectResult == MFRC522::STATUS_OK)
@@ -263,7 +264,7 @@ void loop() {
             &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K)
         {
           Serial.println(F("Bad Card - needs MIFARE Classic cards."));
-          LightLEDPosition(28,  100,0,0, false);
+          //LightLEDPosition(28,  100,0,0, false); //Red error indicator
           CheckResetRFID();
           return;
         }
@@ -273,7 +274,7 @@ void loop() {
           isPlaced = true;
           isPlacedAttempts = 0;
           errorCnt = 0;
-          LightLEDPosition(28,  0,100,0, false); //Green OK Led.
+          //LightLEDPosition(28,  0,100,0, false); //Green OK Led.
     
           
           //Check for RESET RFID
@@ -304,7 +305,7 @@ void loop() {
       {
         Serial.print("PICC_Select failed with:");
         Serial.println( mfrc522.GetStatusCodeName(selectResult) );
-        LightLEDPosition(28,  100,0,0, false); //Red warning LED
+        //LightLEDPosition(28,  100,0,0, false); //Red warning LED
 
         CheckResetRFID();
       }
@@ -314,7 +315,7 @@ void loop() {
     {
       Serial.print("RequestA failed with:");
       Serial.println( mfrc522.GetStatusCodeName(reqAResult) );
-      LightLEDPosition(28,  100,0,0, false); //Red warning LED
+      //LightLEDPosition(28,  100,0,0, false); //Red warning LED
 
       CheckResetRFID();
     }
@@ -323,54 +324,6 @@ void loop() {
       Serial.println("No card - RequestA Timed out");
     }*/
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-    /*
-    if ( ! mfrc522.PICC_IsNewCardPresent())
-    {
-      Serial.print("No card present.  debug_cnt: ");
-      Serial.println(debug_cnt);
-
-      debug_cnt++;
-      if(debug_cnt>200)
-      {
-        Serial.println("DEBUG No card present for too long - resetting ---------------------------------");
-
-        debug_cnt = 0;
-        mfrc522.PCD_Reset();
-        InitRFIDReader();
-      }
-      return;
-    }
-    
-    debug_cnt = 0;
-    //Serial.println("A card is present");
-    
-    // Select one of the cards
-    if ( ! mfrc522.PICC_ReadCardSerial()) {
-      LightLEDPosition(28,  100,0,0, false);
-      Serial.println("Could not read serial from card");
-      return;
-    }
-  
-    // Show some details of the PICC (that is: the tag/card)
-  }
-*/
-
 
   //Serial.println("loop done");
 }
